@@ -9,14 +9,15 @@ import com.mandiconnect.model.Bid;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Bid persistence plus the FIFO queue (intake order), a max-heap per lot
- * (highest offer), and a linked list per lot (history in arrival order).
+ * Manages bids in MySQL and in three ADS structures:
+ * - BidQueue: processes incoming bids in FIFO order
+ * - MaxHeap (one per lot): gives the highest bid in O(1) time
+ * - BidLinkedList (one per lot): stores bid history in arrival order
  */
 public class BidService {
 
@@ -26,6 +27,7 @@ public class BidService {
     private final Map<Long, BidLinkedList<Bid>> historyByLot = new HashMap<>();
     private final BidLinkedList<Bid> processedFifo = new BidLinkedList<>();
 
+    /** Loads all bids from MySQL and builds each lot's MaxHeap and BidLinkedList. */
     public void warmUp() throws SQLException {
         heapByLot.clear();
         historyByLot.clear();
@@ -34,10 +36,7 @@ public class BidService {
         }
     }
 
-    /**
-     * Enqueues the bid, immediately dequeues it (FIFO), stores it, then indexes
-     * it in the lot heap and the lot history list.
-     */
+    /** Enqueues bid (FIFO), dequeues it, saves to MySQL, and indexes in heap + linked list. */
     public Bid placeBid(long lotId, long traderId, double amount) throws SQLException {
         if (amount <= 0) {
             throw new IllegalArgumentException("Bid amount must be positive.");
@@ -47,18 +46,22 @@ public class BidService {
         bid.setTraderId(traderId);
         bid.setAmount(amount);
         bid.setStatus("PENDING");
+
+        // 1. Place in FIFO queue so arrival order is respected
         pending.enqueue(bid);
         Bid next = pending.dequeue();
         if (next == null) {
             throw new IllegalStateException("Bid queue lost the bid it just accepted.");
         }
+
+        // 2. Save to MySQL and update MaxHeap + BidLinkedList
         dao.insert(next);
         index(next);
         processedFifo.add(next);
         return next;
     }
 
-    /** Root of the lot's max-heap, or null when the lot has no indexed bids. */
+    /** Returns the highest bid for a lot using MaxHeap.peekMax() in O(1) time. */
     public Bid highestBid(long lotId) {
         MaxHeap<Bid> heap = heapByLot.get(lotId);
         if (heap == null || heap.isEmpty()) {
@@ -67,10 +70,7 @@ public class BidService {
         return heap.peekMax().data;
     }
 
-    /**
-     * History newest-first from the linked list. Falls back to the database
-     * when this service has not indexed the lot.
-     */
+    /** Returns bid history newest-first using BidLinkedList.reversed(). */
     public List<Bid> history(long lotId) throws SQLException {
         BidLinkedList<Bid> list = historyByLot.get(lotId);
         if (list == null || list.size() == 0) {
@@ -79,12 +79,12 @@ public class BidService {
         return list.reversed();
     }
 
-    /** Bids on a lot, highest amount first, ordered by {@link QuickSort}. */
+    /** Returns bids sorted from highest to lowest amount using QuickSort. */
     public List<Bid> sortedByAmountDesc(long lotId) throws SQLException {
         BidLinkedList<Bid> list = historyByLot.get(lotId);
-        List<Bid> bids = list == null ? dao.findByLot(lotId) : list.toList();
+        List<Bid> bids = (list == null) ? dao.findByLot(lotId) : list.toList();
         List<Bid> copy = new ArrayList<>(bids);
-        QuickSort.sort(copy, Comparator.comparingDouble(Bid::getAmount).reversed());
+        QuickSort.sort(copy, (a, b) -> Double.compare(b.getAmount(), a.getAmount()));
         return copy;
     }
 
@@ -92,6 +92,7 @@ public class BidService {
         return dao.findByTrader(traderId);
     }
 
+    /** Updates bid status in MySQL and inside the in-memory linked list. */
     public void updateStatus(long bidId, String status) throws SQLException {
         dao.updateStatus(bidId, status);
         for (BidLinkedList<Bid> list : historyByLot.values()) {
@@ -115,13 +116,26 @@ public class BidService {
         return historyByLot.get(lotId);
     }
 
-    /** Bids this session has already dequeued, in FIFO order. */
     public BidLinkedList<Bid> getProcessedFifo() {
         return processedFifo;
     }
 
+    /** Adds a bid into the lot's MaxHeap and BidLinkedList. */
     private void index(Bid bid) {
-        heapByLot.computeIfAbsent(bid.getLotId(), id -> new MaxHeap<>()).insert(bid.getAmount(), bid);
-        historyByLot.computeIfAbsent(bid.getLotId(), id -> new BidLinkedList<>()).add(bid);
+        long lotId = bid.getLotId();
+
+        MaxHeap<Bid> heap = heapByLot.get(lotId);
+        if (heap == null) {
+            heap = new MaxHeap<>();
+            heapByLot.put(lotId, heap);
+        }
+        heap.insert(bid.getAmount(), bid);
+
+        BidLinkedList<Bid> list = historyByLot.get(lotId);
+        if (list == null) {
+            list = new BidLinkedList<>();
+            historyByLot.put(lotId, list);
+        }
+        list.add(bid);
     }
 }

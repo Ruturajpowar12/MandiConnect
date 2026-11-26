@@ -17,41 +17,28 @@ import java.util.Random;
 import java.util.TreeMap;
 
 /**
- * Times each custom structure against the JDK collection students already know.
- *
- * <p>For every n in {1000, 5000, 10000} the runner measures HashTable vs HashMap,
- * BST vs TreeMap, QuickSort vs {@code Collections.sort}, MaxHeap vs PriorityQueue,
- * and BidLinkedList vs LinkedList. Input arrays are built before the clock starts.
- * {@code correct} is true only when the custom output matches the JDK output
- * (for sorting, that output is exactly {@code Collections.sort}).</p>
- *
- * <p>{@link #runAll()} is O(sum of the five algorithms across three sizes), dominated
- * by the n log n sorts and the BST inserts. Extra space is O(n) for the working copies.</p>
+ * Benchmarks each custom ADS structure against Java's built-in equivalent
+ * for input sizes N = 1000, 5000, and 10000, checking both speed and correctness.
  */
 public class BenchmarkRunner {
 
     private static final int[] SIZES = {1000, 5000, 10000};
 
-    /**
-     * Runs the full matrix and prints a text table to stdout.
-     * Time is the sum of the individual benchmarks, space O(n).
-     */
+    /** Runs all five structure benchmarks across all three sizes. */
     public List<BenchmarkResult> runAll() {
         List<BenchmarkResult> results = new ArrayList<>();
         for (int n : SIZES) {
-            results.add(hashTable(n));
-            results.add(bst(n));
-            results.add(quickSort(n));
-            results.add(maxHeap(n));
-            results.add(linkedList(n));
+            results.add(benchmarkHashTable(n));
+            results.add(benchmarkBst(n));
+            results.add(benchmarkQuickSort(n));
+            results.add(benchmarkMaxHeap(n));
+            results.add(benchmarkLinkedList(n));
         }
         print(results);
         return results;
     }
 
-    /**
-     * Prints the same columns the Benchmarks tab shows. Time O(rows), space O(1).
-     */
+    /** Prints the benchmark table to the console. */
     public static void print(List<BenchmarkResult> results) {
         System.out.println("Algorithm                  N     Custom ms  Built-in ms  Correct  Complexity");
         for (BenchmarkResult r : results) {
@@ -65,25 +52,25 @@ public class BenchmarkRunner {
         }
     }
 
-    /**
-     * Entry point so {@code mvn exec:java} can dump the benchmark table.
-     * Time dominated by {@link #runAll()}.
-     */
+    /** Allows running benchmarks directly from the command line. */
     public static void main(String[] args) {
         new BenchmarkRunner().runAll();
     }
 
-    private BenchmarkResult hashTable(int n) {
-        String[] keys = new String[n];
-        int[] lookup = new int[1000];
+    /** Compares custom HashTable against Java HashMap for N inserts + 1000 lookups. */
+    private BenchmarkResult benchmarkHashTable(int n) {
+        // 1. Prepare N random LOT keys and 1000 random lookup indices
         Random random = new Random(1000L + n);
+        String[] keys = new String[n];
         for (int i = 0; i < n; i++) {
-            keys[i] = "LOT-" + Long.toString(random.nextLong() & Long.MAX_VALUE, 36).toUpperCase();
+            keys[i] = "LOT-" + Integer.toString(random.nextInt(Integer.MAX_VALUE), 36).toUpperCase();
         }
+        int[] lookup = new int[1000];
         for (int i = 0; i < lookup.length; i++) {
             lookup[i] = random.nextInt(n);
         }
 
+        // 2. Time custom HashTable
         HashTable<String> table = new HashTable<>(101);
         long t0 = System.nanoTime();
         for (int i = 0; i < n; i++) {
@@ -93,8 +80,9 @@ public class BenchmarkRunner {
         for (int i = 0; i < lookup.length; i++) {
             customHits[i] = table.get(keys[lookup[i]]).orElse(null);
         }
-        long custom = System.nanoTime() - t0;
+        long customTime = System.nanoTime() - t0;
 
+        // 3. Time Java HashMap
         HashMap<String, String> map = new HashMap<>();
         t0 = System.nanoTime();
         for (int i = 0; i < n; i++) {
@@ -104,8 +92,9 @@ public class BenchmarkRunner {
         for (int i = 0; i < lookup.length; i++) {
             builtinHits[i] = map.get(keys[lookup[i]]);
         }
-        long builtin = System.nanoTime() - t0;
+        long builtinTime = System.nanoTime() - t0;
 
+        // 4. Verify both returned the exact same values
         boolean correct = true;
         for (int i = 0; i < lookup.length; i++) {
             if (customHits[i] == null || !customHits[i].equals(builtinHits[i])) {
@@ -113,16 +102,19 @@ public class BenchmarkRunner {
                 break;
             }
         }
-        return new BenchmarkResult("HashTable vs HashMap", n, custom, builtin, correct, "O(1) average");
+        return new BenchmarkResult("HashTable vs HashMap", n, customTime, builtinTime, correct, "O(1) average");
     }
 
-    private BenchmarkResult bst(int n) {
+    /** Compares custom BinarySearchTree against Java TreeMap for N inserts + range queries. */
+    private BenchmarkResult benchmarkBst(int n) {
+        // 1. Prepare N shuffled prices
         double[] prices = new double[n];
         for (int i = 0; i < n; i++) {
             prices[i] = (10000.0 * i) / n;
         }
         shuffle(prices, new Random(2000L + n));
 
+        // 2. Time custom BinarySearchTree inserts + 100 range queries
         BinarySearchTree<Double> tree = new BinarySearchTree<>();
         long t0 = System.nanoTime();
         for (double price : prices) {
@@ -132,8 +124,9 @@ public class BenchmarkRunner {
         for (int q = 0; q < 100; q++) {
             customRange = tree.priceRange(2000, 5000);
         }
-        long custom = System.nanoTime() - t0;
+        long customTime = System.nanoTime() - t0;
 
+        // 3. Time Java TreeMap inserts + 100 subMap range queries
         TreeMap<Double, Double> map = new TreeMap<>();
         t0 = System.nanoTime();
         for (double price : prices) {
@@ -143,40 +136,49 @@ public class BenchmarkRunner {
         for (int q = 0; q < 100; q++) {
             builtinRange = new ArrayList<>(map.subMap(2000.0, true, 5000.0, true).values());
         }
-        long builtin = System.nanoTime() - t0;
+        long builtinTime = System.nanoTime() - t0;
 
+        // 4. Verify both range results match
         boolean correct = customRange != null && customRange.equals(builtinRange);
-        return new BenchmarkResult("BST vs TreeMap", n, custom, builtin, correct, "O(h + k) range");
+        return new BenchmarkResult("BST vs TreeMap", n, customTime, builtinTime, correct, "O(h + k) range");
     }
 
-    private BenchmarkResult quickSort(int n) {
-        List<Double> source = new ArrayList<>(n);
+    /** Compares custom QuickSort against Java Collections.sort on N random numbers. */
+    private BenchmarkResult benchmarkQuickSort(int n) {
+        // 1. Prepare identical random lists
         Random random = new Random(3000L + n);
+        List<Double> source = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
             source.add(random.nextDouble() * 10000.0);
         }
         List<Double> customList = new ArrayList<>(source);
         List<Double> builtinList = new ArrayList<>(source);
 
+        // 2. Time custom QuickSort
         long t0 = System.nanoTime();
         QuickSort.sort(customList, Comparator.naturalOrder());
-        long custom = System.nanoTime() - t0;
+        long customTime = System.nanoTime() - t0;
 
+        // 3. Time Java Collections.sort
         t0 = System.nanoTime();
         Collections.sort(builtinList);
-        long builtin = System.nanoTime() - t0;
+        long builtinTime = System.nanoTime() - t0;
 
+        // 4. Verify both sorted lists match
         boolean correct = customList.equals(builtinList);
-        return new BenchmarkResult("QuickSort vs sort", n, custom, builtin, correct, "O(n log n) average");
+        return new BenchmarkResult("QuickSort vs sort", n, customTime, builtinTime, correct, "O(n log n) average");
     }
 
-    private BenchmarkResult maxHeap(int n) {
-        double[] amounts = new double[n];
+    /** Compares custom MaxHeap against Java PriorityQueue for N inserts + 100 max extractions. */
+    private BenchmarkResult benchmarkMaxHeap(int n) {
+        // 1. Prepare N random bid amounts
         Random random = new Random(4000L + n);
+        double[] amounts = new double[n];
         for (int i = 0; i < n; i++) {
             amounts[i] = random.nextDouble() * 10000.0;
         }
 
+        // 2. Time custom MaxHeap insert + top 100 extractions
         MaxHeap<Integer> heap = new MaxHeap<>();
         long t0 = System.nanoTime();
         for (int i = 0; i < n; i++) {
@@ -186,8 +188,9 @@ public class BenchmarkRunner {
         for (int i = 0; i < customTop.length; i++) {
             customTop[i] = heap.extractMax().amount;
         }
-        long custom = System.nanoTime() - t0;
+        long customTime = System.nanoTime() - t0;
 
+        // 3. Time Java PriorityQueue (reversed so largest comes out first)
         PriorityQueue<Double> pq = new PriorityQueue<>(Comparator.reverseOrder());
         t0 = System.nanoTime();
         for (double amount : amounts) {
@@ -197,8 +200,9 @@ public class BenchmarkRunner {
         for (int i = 0; i < builtinTop.length; i++) {
             builtinTop[i] = pq.remove();
         }
-        long builtin = System.nanoTime() - t0;
+        long builtinTime = System.nanoTime() - t0;
 
+        // 4. Verify top 100 extracted values match
         boolean correct = true;
         for (int i = 0; i < customTop.length; i++) {
             if (Double.compare(customTop[i], builtinTop[i]) != 0) {
@@ -206,36 +210,42 @@ public class BenchmarkRunner {
                 break;
             }
         }
-        return new BenchmarkResult("MaxHeap vs PriorityQueue", n, custom, builtin, correct, "O(log n) extract");
+        return new BenchmarkResult("MaxHeap vs PriorityQueue", n, customTime, builtinTime, correct, "O(log n) extract");
     }
 
-    private BenchmarkResult linkedList(int n) {
+    /** Compares custom BidLinkedList against Java LinkedList for N appends + traversal. */
+    private BenchmarkResult benchmarkLinkedList(int n) {
+        // 1. Time custom BidLinkedList
         BidLinkedList<Integer> customList = new BidLinkedList<>();
         long t0 = System.nanoTime();
         for (int i = 0; i < n; i++) {
             customList.add(i);
         }
         List<Integer> customOut = customList.toList();
-        long custom = System.nanoTime() - t0;
+        long customTime = System.nanoTime() - t0;
 
+        // 2. Time Java LinkedList
         LinkedList<Integer> builtinList = new LinkedList<>();
         t0 = System.nanoTime();
         for (int i = 0; i < n; i++) {
             builtinList.add(i);
         }
         List<Integer> builtinOut = new ArrayList<>(builtinList);
-        long builtin = System.nanoTime() - t0;
+        long builtinTime = System.nanoTime() - t0;
 
+        // 3. Verify both lists contain identical elements in order
         return new BenchmarkResult(
-                "BidLinkedList vs LinkedList", n, custom, builtin, customOut.equals(builtinOut), "O(1) append");
+                "BidLinkedList vs LinkedList", n, customTime, builtinTime,
+                customOut.equals(builtinOut), "O(1) append");
     }
 
+    /** Fisher-Yates shuffle so BST receives randomized insertion order. */
     private static void shuffle(double[] values, Random random) {
         for (int i = values.length - 1; i > 0; i--) {
             int j = random.nextInt(i + 1);
-            double tmp = values[i];
+            double temp = values[i];
             values[i] = values[j];
-            values[j] = tmp;
+            values[j] = temp;
         }
     }
 }

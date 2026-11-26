@@ -4,27 +4,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Singly linked list with head and tail pointers.
- *
- * <p>MandiConnect keeps the bid history of each lot in insertion order. A tail
- * pointer makes every new bid an O(1) append, which an {@code ArrayList} also
- * offers on average but not as a visible node chain. The Algorithm Console walks
- * {@link #toList()} and prints {@code [₹2600] → [₹2700] → null}. Nodes are a
- * private raw class. This list does not use {@code java.util.LinkedList}.</p>
- *
- * <pre>
- * Operation    Time     Extra space
- * add          O(1)     O(1)
- * toList       O(n)     O(n)
- * reversed     O(n)     O(n)
- * size         O(1)     O(1)
- * Structure             O(n) nodes
- * </pre>
- *
- * @param <T> element type, typically {@code Bid}
+ * Custom Singly Linked List with head and tail pointers.
+ * Stores bid history in insertion order with O(1) append at the tail.
  */
 public class BidLinkedList<T> {
 
+    /** Single node holding data and a pointer to the next node. */
     private static final class Node<T> {
         final T data;
         Node<T> next;
@@ -34,52 +19,44 @@ public class BidLinkedList<T> {
         }
     }
 
-    private Node<T> head;
-    private Node<T> tail;
-    private int size;
+    private Node<T> head; // First (oldest) node
+    private Node<T> tail; // Last (newest) node
+    private int size;     // Total node count
 
-    /**
-     * Appends {@code data} at the tail. Time O(1), space O(1).
-     */
+    /** Appends a new node at the tail in O(1) time. */
     public void add(T data) {
         Node<T> node = new Node<>(data);
         if (tail == null) {
+            // List is empty: both head and tail point to the new node
             head = node;
             tail = node;
         } else {
+            // Link new node after tail and advance tail
             tail.next = node;
             tail = node;
         }
         size++;
     }
 
-    /**
-     * Elements from head to tail, which is insertion order. Time O(n), space O(n).
-     */
+    /** Walks from head to tail and returns elements oldest-to-newest. Time: O(n). */
     public List<T> toList() {
-        List<T> out = new ArrayList<>(size);
-        for (Node<T> node = head; node != null; node = node.next) {
-            out.add(node.data);
+        List<T> list = new ArrayList<>(size);
+        for (Node<T> cur = head; cur != null; cur = cur.next) {
+            list.add(cur.data);
         }
-        return out;
+        return list;
     }
 
-    /**
-     * Elements from tail to head. The links themselves are not mutated.
-     * Time O(n), space O(n).
-     */
+    /** Returns elements newest-to-oldest without modifying node links. Time: O(n). */
     public List<T> reversed() {
         List<T> forward = toList();
-        List<T> out = new ArrayList<>(forward.size());
+        List<T> reversed = new ArrayList<>(forward.size());
         for (int i = forward.size() - 1; i >= 0; i--) {
-            out.add(forward.get(i));
+            reversed.add(forward.get(i));
         }
-        return out;
+        return reversed;
     }
 
-    /**
-     * Number of nodes. Time O(1), space O(1).
-     */
     public int size() {
         return size;
     }

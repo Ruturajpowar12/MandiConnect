@@ -1,20 +1,21 @@
 package com.mandiconnect.model;
 
 /**
- * A crop lot offered by a farmer. {@code status} is {@code AVAILABLE}, {@code IN_AUCTION}, or {@code SOLD}.
+ * Model class representing a crop lot listed by a farmer.
+ * Status can be AVAILABLE, IN_AUCTION, or SOLD.
  */
 public class Lot {
-    private long id;
-    private String lotCode;
-    private String cropName;
-    private double quantity;
-    private String unit;
-    private String qualityGrade;
-    private String location;
-    private double expectedPrice;
-    private String description;
-    private long farmerId;
-    private String status;
+    private long id;              // Primary key in lots table
+    private String lotCode;       // Unique short code like LOT-A1B2C3D4 (HashTable key)
+    private String cropName;      // Name of the crop (e.g., Wheat, Mango)
+    private double quantity;      // Amount of crop
+    private String unit;          // Unit (kg, quintal, tonne)
+    private String qualityGrade;  // Quality grade (A, B, C)
+    private String location;      // Mandi/farm location
+    private double expectedPrice; // Farmer's expected price (BST key)
+    private String description;   // Optional notes
+    private long farmerId;        // Owner farmer's user ID
+    private String status;        // AVAILABLE, IN_AUCTION, or SOLD
 
     public long getId() {
         return id;

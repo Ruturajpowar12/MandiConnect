@@ -21,17 +21,16 @@ import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
-import javax.swing.SwingWorker;
+import javax.swing.SwingUtilities;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
 import java.awt.Font;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 /**
- * Live evidence that each structure is doing the work the services claim.
- * This frame is the graded ADS demonstration.
+ * Algorithm Console window: demonstrates all 6 custom ADS structures live
+ * and compares their speed against Java's built-in collections.
  */
 public class AlgorithmConsoleFrame extends JFrame {
 
@@ -46,50 +45,43 @@ public class AlgorithmConsoleFrame extends JFrame {
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 
+        // One tab for each data structure + one Benchmarks tab
         JTabbedPane tabs = new JTabbedPane();
-        tabs.addTab("Hash Table", hashPanel());
-        tabs.addTab("BST (Price)", bstPanel());
-        tabs.addTab("QuickSort", quickPanel());
-        tabs.addTab("MaxHeap (Bids)", heapPanel());
-        tabs.addTab("Bid Queue", queuePanel());
-        tabs.addTab("Bid LinkedList", listPanel());
-        tabs.addTab("Benchmarks", benchmarkPanel());
+        tabs.addTab("Hash Table", createReportTab(() -> hashReport()));
+        tabs.addTab("BST (Price)", createReportTab(() -> bstReport()));
+        tabs.addTab("QuickSort", createReportTab(() -> quickReport()));
+        tabs.addTab("MaxHeap (Bids)", createReportTab(() -> heapReport()));
+        tabs.addTab("Bid Queue", createReportTab(() -> queueReport()));
+        tabs.addTab("Bid LinkedList", createReportTab(() -> listReport()));
+        tabs.addTab("Benchmarks", createBenchmarkTab());
         add(tabs);
     }
 
-    private JPanel hashPanel() {
-        JTextArea area = mono();
-        return refreshable(area, () -> area.setText(hashReport()));
+    /** Functional helper so each tab can regenerate its text report on Refresh. */
+    private interface ReportSupplier {
+        String get();
     }
 
-    private JPanel bstPanel() {
-        JTextArea area = mono();
-        return refreshable(area, () -> area.setText(bstReport()));
+    /** Builds a tab with a Refresh button at the top and monospaced text area below. */
+    private JPanel createReportTab(ReportSupplier supplier) {
+        JTextArea area = new JTextArea();
+        area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
+        area.setEditable(false);
+
+        JButton refreshBtn = UiText.button("Refresh", e -> area.setText(supplier.get()));
+        area.setText(supplier.get());
+
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.add(refreshBtn, BorderLayout.NORTH);
+        panel.add(new JScrollPane(area), BorderLayout.CENTER);
+        return panel;
     }
 
-    private JPanel quickPanel() {
-        JTextArea area = mono();
-        return refreshable(area, () -> area.setText(quickReport()));
-    }
-
-    private JPanel heapPanel() {
-        JTextArea area = mono();
-        return refreshable(area, () -> area.setText(heapReport()));
-    }
-
-    private JPanel queuePanel() {
-        JTextArea area = mono();
-        return refreshable(area, () -> area.setText(queueReport()));
-    }
-
-    private JPanel listPanel() {
-        JTextArea area = mono();
-        return refreshable(area, () -> area.setText(listReport()));
-    }
-
+    /** Tab 1: Shows HashTable size, load factor, sample lookups, and probe count. */
     private String hashReport() {
         HashTable<Lot> table = lots.getHash();
         long before = table.getTotalProbes();
+
         List<Lot> sample = new ArrayList<>();
         for (Lot lot : lots.getBST().inOrder()) {
             if (sample.size() == 10) {
@@ -97,6 +89,7 @@ public class AlgorithmConsoleFrame extends JFrame {
             }
             sample.add(lot);
         }
+
         StringBuilder sb = new StringBuilder();
         sb.append("Hash table — linear probing, polynomial hash h = (h*31 + c) mod capacity\n");
         sb.append("capacity     : ").append(table.capacity()).append('\n');
@@ -123,6 +116,7 @@ public class AlgorithmConsoleFrame extends JFrame {
         return sb.toString();
     }
 
+    /** Tab 2: Shows BST size, height, in-order list, priceRange(2000, 5000), and ASCII tree. */
     private String bstReport() {
         BinarySearchTree<Lot> tree = lots.getBST();
         StringBuilder sb = new StringBuilder();
@@ -130,6 +124,7 @@ public class AlgorithmConsoleFrame extends JFrame {
         sb.append("size                : ").append(tree.size()).append('\n');
         sb.append("height              : ").append(tree.height()).append('\n');
         sb.append("insert comparisons  : ").append(tree.getInsertComparisons()).append('\n');
+
         List<Lot> ordered = tree.inOrder();
         sb.append("\nIn-order (first 15, ascending price)\n");
         int shown = Math.min(15, ordered.size());
@@ -140,6 +135,7 @@ public class AlgorithmConsoleFrame extends JFrame {
             Lot lot = ordered.get(i);
             sb.append(String.format("  %2d. ₹%s  %s  %s%n", i + 1, UiText.money(lot.getExpectedPrice()), lot.getLotCode(), lot.getCropName()));
         }
+
         List<Lot> range = tree.priceRange(2000, 5000);
         sb.append("\npriceRange(2000, 5000) count: ").append(range.size()).append('\n');
         for (int i = 0; i < Math.min(15, range.size()); i++) {
@@ -151,15 +147,16 @@ public class AlgorithmConsoleFrame extends JFrame {
         return sb.toString();
     }
 
+    /** Tab 3: Runs QuickSort on available lots and compares comparisons vs n*log2(n). */
     private String quickReport() {
         StringBuilder sb = new StringBuilder();
         try {
             List<Lot> data = new ArrayList<>(lots.available());
             sb.append("QuickSort — Lomuto partition, median-of-three pivot\n");
             sb.append("Source: available lots\n");
-            long comparisons = QuickSort.sortAndCount(data, Comparator.comparingDouble(Lot::getExpectedPrice));
+            long comparisons = QuickSort.sortAndCount(data, (a, b) -> Double.compare(a.getExpectedPrice(), b.getExpectedPrice()));
             int n = data.size();
-            double bound = n <= 1 ? 0 : n * (Math.log(n) / Math.log(2));
+            double bound = (n <= 1) ? 0 : n * (Math.log(n) / Math.log(2));
             sb.append("N                  : ").append(n).append('\n');
             sb.append("comparison count   : ").append(comparisons).append('\n');
             sb.append(String.format("theoretical n·log2 n: %.1f%n", bound));
@@ -180,6 +177,7 @@ public class AlgorithmConsoleFrame extends JFrame {
         return sb.toString();
     }
 
+    /** Tab 4: Shows each lot's MaxHeap array, root maximum, and sift swap counts. */
     private String heapReport() {
         StringBuilder sb = new StringBuilder();
         sb.append("Max-heap per lot — index 0 is the highest bid\n");
@@ -210,6 +208,7 @@ public class AlgorithmConsoleFrame extends JFrame {
         return sb.toString();
     }
 
+    /** Tab 5: Shows the FIFO BidQueue snapshot and session dequeue log. */
     private String queueReport() {
         BidQueue<Bid> queue = bids.getQueue();
         StringBuilder sb = new StringBuilder();
@@ -241,6 +240,7 @@ public class AlgorithmConsoleFrame extends JFrame {
         return sb.toString();
     }
 
+    /** Tab 6: Prints each lot's BidLinkedList node chain from head to tail. */
     private String listReport() {
         StringBuilder sb = new StringBuilder();
         sb.append("Singly linked bid history — head is the earliest bid, tail is the latest\n\n");
@@ -267,76 +267,58 @@ public class AlgorithmConsoleFrame extends JFrame {
         return sb.toString();
     }
 
-    private JPanel benchmarkPanel() {
-        DefaultTableModel model = new DefaultTableModel(
-                new String[]{"Algorithm", "N", "Custom (ms)", "Built-in (ms)", "Correct", "Complexity"}, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return false;
-            }
-        };
+    /** Tab 7: Table comparing custom structures against Java built-in equivalents. */
+    private JPanel createBenchmarkTab() {
+        DefaultTableModel model = UiText.readOnlyModel(
+                "Algorithm", "N", "Custom (ms)", "Built-in (ms)", "Correct", "Complexity");
         JTable table = new JTable(model);
         table.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
-        JButton run = new JButton("Run Benchmarks");
-        run.addActionListener(e -> {
-            run.setEnabled(false);
-            model.setRowCount(0);
-            SwingWorker<List<BenchmarkResult>, Void> worker = new SwingWorker<>() {
-                @Override
-                protected List<BenchmarkResult> doInBackground() {
-                    return new BenchmarkRunner().runAll();
-                }
 
-                @Override
-                protected void done() {
-                    run.setEnabled(true);
-                    try {
-                        for (BenchmarkResult result : get()) {
-                            model.addRow(new Object[]{
-                                    result.algorithm(),
-                                    result.n(),
-                                    String.format("%.3f", result.customNanos() / 1_000_000.0),
-                                    String.format("%.3f", result.builtinNanos() / 1_000_000.0),
-                                    result.correct() ? "✔" : "✘",
-                                    result.complexity()
-                            });
-                        }
-                    } catch (Exception ex) {
-                        JOptionPane.showMessageDialog(AlgorithmConsoleFrame.this,
-                                ex.getMessage(), "Benchmark", JOptionPane.ERROR_MESSAGE);
-                    }
-                }
-            };
-            worker.execute();
-        });
-        JPanel panel = new JPanel(new BorderLayout());
+        JButton runBtn = new JButton("Run Benchmarks");
+        runBtn.addActionListener(e -> runBenchmarks(runBtn, model));
+
         JPanel north = new JPanel(new BorderLayout());
-        north.add(run, BorderLayout.WEST);
+        north.add(runBtn, BorderLayout.WEST);
+
+        JPanel panel = new JPanel(new BorderLayout());
         panel.add(north, BorderLayout.NORTH);
         panel.add(new JScrollPane(table), BorderLayout.CENTER);
         return panel;
     }
 
-    private JPanel refreshable(JTextArea area, Runnable refresh) {
-        JButton button = new JButton("Refresh");
-        button.addActionListener(e -> refresh.run());
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.add(button, BorderLayout.NORTH);
-        panel.add(new JScrollPane(area), BorderLayout.CENTER);
-        refresh.run();
-        return panel;
-    }
+    /** Runs BenchmarkRunner in a background thread so the Swing UI stays responsive. */
+    private void runBenchmarks(JButton runBtn, DefaultTableModel model) {
+        runBtn.setEnabled(false);
+        model.setRowCount(0);
 
-    private static JTextArea mono() {
-        JTextArea area = new JTextArea();
-        area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
-        area.setEditable(false);
-        return area;
+        new Thread(() -> {
+            try {
+                List<BenchmarkResult> results = new BenchmarkRunner().runAll();
+                // Update Swing table back on the Event Dispatch Thread
+                SwingUtilities.invokeLater(() -> {
+                    for (BenchmarkResult r : results) {
+                        model.addRow(new Object[]{
+                                r.algorithm(),
+                                r.n(),
+                                String.format("%.3f", r.customNanos() / 1_000_000.0),
+                                String.format("%.3f", r.builtinNanos() / 1_000_000.0),
+                                r.correct() ? "✔" : "✘",
+                                r.complexity()
+                        });
+                    }
+                    runBtn.setEnabled(true);
+                });
+            } catch (Exception ex) {
+                SwingUtilities.invokeLater(() -> {
+                    runBtn.setEnabled(true);
+                    JOptionPane.showMessageDialog(this, ex.getMessage(), "Benchmark", JOptionPane.ERROR_MESSAGE);
+                });
+            }
+        }).start();
     }
 
     private static String formatHeap(double[] amounts) {
-        StringBuilder sb = new StringBuilder();
-        sb.append('[');
+        StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < amounts.length; i++) {
             if (i > 0) {
                 sb.append(' ');

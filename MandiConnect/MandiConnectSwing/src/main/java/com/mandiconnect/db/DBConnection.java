@@ -5,23 +5,22 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 
 /**
- * Opens JDBC connections to the local XAMPP MySQL server.
- * Username {@code root} and an empty password are the XAMPP defaults.
+ * Provides JDBC database connections to the local MySQL (XAMPP) database.
  */
 public final class DBConnection {
 
+    // Database connection URL pointing to local 'mandiconnect' database
     public static final String URL =
             "jdbc:mysql://localhost:3306/mandiconnect?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true";
+
+    // Default XAMPP MySQL credentials
     private static final String USER = "root";
     private static final String PASSWORD = "";
 
     private DBConnection() {
     }
 
-    /**
-     * @return a new connection; the caller must close it
-     * @throws SQLException if MySQL is down or the schema has not been imported
-     */
+    /** Opens and returns a new MySQL connection (caller closes it with try-with-resources). */
     public static Connection getConnection() throws SQLException {
         return DriverManager.getConnection(URL, USER, PASSWORD);
     }

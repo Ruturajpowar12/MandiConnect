@@ -1,17 +1,18 @@
 package com.mandiconnect.model;
 
 /**
- * A registered MandiConnect account. {@code role} is {@code FARMER}, {@code TRADER}, or {@code ADMIN}.
+ * Model class representing a user account.
+ * Role can be FARMER, TRADER, or ADMIN.
  */
 public class User {
-    private long id;
-    private String name;
-    private String email;
-    private String password;
-    private String phone;
-    private String location;
-    private String role;
-    private boolean active;
+    private long id;         // Primary key in users table
+    private String name;     // Full name
+    private String email;    // Unique login email
+    private String password; // Salted SHA-256 password hash
+    private String phone;    // Contact number
+    private String location; // City/village
+    private String role;     // FARMER, TRADER, or ADMIN
+    private boolean active;  // Whether the account is enabled
 
     public long getId() {
         return id;

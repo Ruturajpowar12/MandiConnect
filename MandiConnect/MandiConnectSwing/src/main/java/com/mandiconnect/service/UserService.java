@@ -12,8 +12,8 @@ import java.util.Base64;
 import java.util.List;
 
 /**
- * Registration, login, and the one-time admin seed.
- * Passwords are stored as {@code base64(salt):base64(SHA-256(salt || password))}.
+ * Handles user registration, login authentication, password hashing,
+ * and creating the default Admin account on first startup.
  */
 public class UserService {
 
@@ -23,9 +23,7 @@ public class UserService {
     private final UserDAO dao = new UserDAO();
     private final SecureRandom random = new SecureRandom();
 
-    /**
-     * 16-byte random salt, then SHA-256. The stored form is {@code base64(salt):base64(hash)}.
-     */
+    /** Hashes a password with a random 16-byte salt and SHA-256 -> "base64(salt):base64(hash)". */
     public String hash(String password) {
         byte[] salt = new byte[16];
         random.nextBytes(salt);
@@ -33,9 +31,7 @@ public class UserService {
         return Base64.getEncoder().encodeToString(salt) + ":" + Base64.getEncoder().encodeToString(digest);
     }
 
-    /**
-     * Checks {@code password} against a value produced by {@link #hash(String)}.
-     */
+    /** Checks if a plain-text password matches the stored salted hash. */
     public boolean verify(String password, String stored) {
         if (password == null || stored == null || !stored.contains(":")) {
             return false;
@@ -47,6 +43,7 @@ public class UserService {
         return MessageDigest.isEqual(expected, actual);
     }
 
+    /** Validates inputs and registers a new FARMER or TRADER account in MySQL. */
     public User register(String name, String email, String password, String phone, String location, String role)
             throws SQLException {
         String cleanEmail = email == null ? "" : email.trim();
@@ -71,9 +68,7 @@ public class UserService {
         return user;
     }
 
-    /**
-     * @return the user when the password matches and the account is active; otherwise null
-     */
+    /** Authenticates login credentials; returns null if invalid or account is disabled. */
     public User authenticate(String email, String password) throws SQLException {
         if (email == null || password == null) {
             return null;
@@ -96,9 +91,7 @@ public class UserService {
         dao.toggleActive(id);
     }
 
-    /**
-     * Inserts {@code admin@mandiconnect.com} / {@code admin123} when that email is missing.
-     */
+    /** Inserts the default admin account at startup if it is not already in MySQL. */
     public void ensureAdmin() throws SQLException {
         if (dao.existsByEmail(ADMIN_EMAIL)) {
             return;
@@ -115,6 +108,7 @@ public class UserService {
         System.out.println(">> Default admin created: admin@mandiconnect.com / admin123");
     }
 
+    /** Computes SHA-256(salt + password). */
     private static byte[] sha256(byte[] salt, String password) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");

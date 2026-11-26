@@ -4,38 +4,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Unbalanced binary search tree keyed by a {@code double} price. Each node stores
- * an application payload (a lot or a bid). Equal prices are inserted on the
- * <strong>right</strong> child, so in-order traversal is non-decreasing and duplicate
- * offers stay in the tree.
- *
- * <p>MandiConnect uses the tree to answer "which lots are expected between ₹min and
- * ₹max?" without scanning every lot. {@link #priceRange(double, double)} prunes any
- * subtree that cannot intersect the window.</p>
- *
- * <p>The tree is intentionally not AVL or red-black: the project demonstrates the
- * textbook BST, and sorted inserts degrade to a chain of height n. Random mandi
- * prices keep the height near log n. Nodes are a private raw class, not
- * {@code java.util.TreeMap}.</p>
- *
- * <pre>
- * Operation        Best        Average     Worst      Output space
- * insert           O(1)        O(log n)    O(n)       O(1)
- * inOrder          O(n)        O(n)        O(n)       O(n)
- * priceRange       O(h + k)    O(h + k)    O(n)       O(k)
- * height           O(n)        O(n)        O(n)       O(h) stack
- * visualize        O(n)        O(n)        O(n)       O(n)
- * Structure                                           O(n)
- * </pre>
- *
- * Height is the number of nodes on the longest path. An empty tree has height 0
- * and a single node has height 1, so any indexed lot makes the console report
- * a height above zero. {@code h} is that height and {@code k} is the number of hits.
- *
- * @param <T> payload type
+ * Custom Binary Search Tree (BST) ordered by price.
+ * Smaller prices go to the left child; equal or larger prices go to the right child.
+ * Used for price-range filtering without scanning every lot.
  */
 public class BinarySearchTree<T> {
 
+    /** Single node storing price key, payload data, and left/right links. */
     private static final class Node<T> {
         final double price;
         final T data;
@@ -48,137 +23,118 @@ public class BinarySearchTree<T> {
         }
     }
 
-    private Node<T> root;
-    private int size;
-    private long insertComparisons;
+    private Node<T> root;           // Top node of the tree
+    private int size;               // Total nodes in the tree
+    private long insertComparisons; // Counts price comparisons during insert
 
-    /**
-     * Inserts {@code data} under {@code price}. Duplicates go to the right subtree.
-     * Best O(1) when the tree is empty, average O(log n), worst O(n) on a chain.
-     * Counts one comparison per existing node visited.
-     */
+    /** Inserts a value under the given price. Time: O(log n) average, O(n) worst. */
     public void insert(double price, T data) {
-        root = insert(root, price, data);
+        root = insertNode(root, price, data);
         size++;
     }
 
-    private Node<T> insert(Node<T> node, double price, T data) {
+    private Node<T> insertNode(Node<T> node, double price, T data) {
+        // Base case: empty spot reached, create a new node here
         if (node == null) {
             return new Node<>(price, data);
         }
         insertComparisons++;
         if (price < node.price) {
-            node.left = insert(node.left, price, data);
+            node.left = insertNode(node.left, price, data);
         } else {
-            node.right = insert(node.right, price, data);
+            // Equal or greater prices go right so duplicates stay in the tree
+            node.right = insertNode(node.right, price, data);
         }
         return node;
     }
 
-    /**
-     * In-order payload list, prices non-decreasing. Time O(n), space O(n).
-     */
+    /** Returns all items in ascending order of price (Left -> Root -> Right). */
     public List<T> inOrder() {
-        List<T> out = new ArrayList<>();
-        inOrder(root, out);
-        return out;
+        List<T> result = new ArrayList<>();
+        traverseInOrder(root, result);
+        return result;
     }
 
-    private void inOrder(Node<T> node, List<T> out) {
+    private void traverseInOrder(Node<T> node, List<T> result) {
         if (node == null) {
             return;
         }
-        inOrder(node.left, out);
-        out.add(node.data);
-        inOrder(node.right, out);
+        traverseInOrder(node.left, result);
+        result.add(node.data);
+        traverseInOrder(node.right, result);
     }
 
-    /**
-     * Payloads whose price lies in {@code [min, max]}, in ascending order.
-     * Subtrees entirely below {@code min} or entirely above {@code max} are not visited.
-     * Time O(h + k), space O(k), where k is the number of matches.
-     */
+    /** Returns items whose price is between min and max, skipping branches outside the range. */
     public List<T> priceRange(double min, double max) {
-        List<T> out = new ArrayList<>();
+        List<T> result = new ArrayList<>();
         if (min <= max) {
-            priceRange(root, min, max, out);
+            collectInRange(root, min, max, result);
         }
-        return out;
+        return result;
     }
 
-    private void priceRange(Node<T> node, double min, double max, List<T> out) {
+    private void collectInRange(Node<T> node, double min, double max, List<T> result) {
         if (node == null) {
             return;
         }
+        // Only explore left subtree if current price is above min
         if (node.price > min) {
-            priceRange(node.left, min, max, out);
+            collectInRange(node.left, min, max, result);
         }
+        // Add current node if its price falls inside [min, max]
         if (node.price >= min && node.price <= max) {
-            out.add(node.data);
+            result.add(node.data);
         }
+        // Only explore right subtree if current price is <= max
         if (node.price <= max) {
-            priceRange(node.right, min, max, out);
+            collectInRange(node.right, min, max, result);
         }
     }
 
-    /**
-     * Number of inserted nodes. Time O(1), space O(1).
-     */
     public int size() {
         return size;
     }
 
-    /**
-     * Nodes on the longest root-to-leaf path, or 0 when the tree is empty.
-     * Time O(n), space O(h) for the recursion stack.
-     */
+    /** Returns the height of the tree (0 if empty, 1 for root only). */
     public int height() {
-        return height(root);
+        return nodeHeight(root);
     }
 
-    private int height(Node<T> node) {
+    private int nodeHeight(Node<T> node) {
         if (node == null) {
             return 0;
         }
-        return 1 + Math.max(height(node.left), height(node.right));
+        return 1 + Math.max(nodeHeight(node.left), nodeHeight(node.right));
     }
 
-    /**
-     * How many price comparisons {@link #insert(double, Object)} has performed.
-     * Time O(1), space O(1).
-     */
     public long getInsertComparisons() {
         return insertComparisons;
     }
 
-    /**
-     * Sideways ASCII tree. The right subtree is drawn above the node and the left
-     * subtree below it, using {@code ├──} and {@code └──}. Time O(n), space O(n).
-     */
+    /** Builds a sideways ASCII representation of the tree for the Algorithm Console. */
     public String visualize() {
         if (root == null) {
             return "(empty tree)";
         }
         StringBuilder sb = new StringBuilder();
-        visualize(root, sb, "", "");
+        buildAscii(root, sb, "", "");
         return sb.toString();
     }
 
-    private void visualize(Node<T> node, StringBuilder sb, String prefix, String childrenPrefix) {
-        sb.append(prefix);
-        sb.append(formatPrice(node.price));
-        sb.append('\n');
+    private void buildAscii(Node<T> node, StringBuilder sb, String prefix, String childPrefix) {
+        sb.append(prefix).append(formatPrice(node.price)).append('\n');
 
         boolean hasLeft = node.left != null;
         boolean hasRight = node.right != null;
 
+        // Draw right child on top and left child below
         if (hasRight && hasLeft) {
-            visualize(node.right, sb, childrenPrefix + "├── ", childrenPrefix + "│   ");
-            visualize(node.left, sb, childrenPrefix + "└── ", childrenPrefix + "    ");
+            buildAscii(node.right, sb, childPrefix + "├── ", childPrefix + "│   ");
+            buildAscii(node.left, sb, childPrefix + "└── ", childPrefix + "    ");
         } else if (hasRight) {
-            visualize(node.right, sb, childrenPrefix + "└── ", childrenPrefix + "    ");
+            buildAscii(node.right, sb, childPrefix + "└── ", childPrefix + "    ");
         } else if (hasLeft) {
-            visualize(node.left, sb, childrenPrefix + "└── ", childrenPrefix + "    ");
+            buildAscii(node.left, sb, childPrefix + "└── ", childPrefix + "    ");
         }
     }
 

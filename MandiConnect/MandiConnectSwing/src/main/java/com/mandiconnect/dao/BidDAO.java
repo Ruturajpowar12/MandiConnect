@@ -12,10 +12,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Plain JDBC access to the {@code bids} table.
+ * Data Access Object (DAO) for reading and writing the 'bids' table in MySQL.
  */
 public class BidDAO {
 
+    /** Inserts a new bid row and saves the auto-generated ID into the Bid object. */
     public long insert(Bid bid) throws SQLException {
         String sql = "INSERT INTO bids (lot_id, trader_id, amount, status) VALUES (?, ?, ?, ?)";
         try (Connection con = DBConnection.getConnection();
@@ -36,10 +37,12 @@ public class BidDAO {
         throw new SQLException("Bid insert did not return a key");
     }
 
+    /** Loads all bids ordered by ID (used on startup to warm up heaps and linked lists). */
     public List<Bid> findAll() throws SQLException {
         return query("SELECT * FROM bids ORDER BY id");
     }
 
+    /** Finds all bids for a specific lot, highest amount first. */
     public List<Bid> findByLot(long lotId) throws SQLException {
         String sql = "SELECT * FROM bids WHERE lot_id = ? ORDER BY amount DESC";
         try (Connection con = DBConnection.getConnection();
@@ -49,6 +52,7 @@ public class BidDAO {
         }
     }
 
+    /** Finds all bids placed by a specific trader, newest first. */
     public List<Bid> findByTrader(long traderId) throws SQLException {
         String sql = "SELECT * FROM bids WHERE trader_id = ? ORDER BY id DESC";
         try (Connection con = DBConnection.getConnection();
@@ -58,6 +62,7 @@ public class BidDAO {
         }
     }
 
+    /** Updates a bid's status (PENDING, WINNING, ACCEPTED, or REJECTED). */
     public void updateStatus(long id, String status) throws SQLException {
         String sql = "UPDATE bids SET status = ? WHERE id = ?";
         try (Connection con = DBConnection.getConnection();
@@ -85,6 +90,7 @@ public class BidDAO {
         }
     }
 
+    /** Converts a database ResultSet row into a Bid object. */
     private Bid map(ResultSet rs) throws SQLException {
         Bid bid = new Bid();
         bid.setId(rs.getLong("id"));

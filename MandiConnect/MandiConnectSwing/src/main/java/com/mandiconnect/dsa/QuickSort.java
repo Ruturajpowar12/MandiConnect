@@ -4,109 +4,93 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * In-place QuickSort with Lomuto partition and a <strong>median-of-three</strong> pivot.
- *
- * <p>MandiConnect sorts available lots by expected price and the bids on a lot by
- * amount. Median-of-three (first, middle, last) avoids the classic O(n²) collapse
- * on an already sorted price list, which is exactly what a BST in-order walk
- * would hand the sorter. The algorithm writes back into the caller's list and
- * allocates only the recursion stack, so it is cache-friendlier than MergeSort
- * for the lot tables the UI shows.</p>
- *
- * <pre>
- * Operation     Best         Average      Worst        Extra space
- * sort          O(n log n)   O(n log n)   O(n²)        O(log n) stack, O(1) heap
- * </pre>
- *
- * The worst case is still quadratic on adversarial input. Sorted and random
- * inputs used by the app and the benchmark stay in the n log n band.
- * Comparisons are counted by {@link #sortAndCount(List, Comparator)}.
+ * In-place QuickSort using Lomuto partition and median-of-three pivot selection.
+ * Used to sort lots by price and bids by amount in O(n log n) average time.
  */
 public final class QuickSort {
+
+    /** Simple counter object so recursive calls can count comparisons. */
+    private static final class Counter {
+        long count;
+    }
 
     private QuickSort() {
     }
 
-    /**
-     * Sorts {@code list} in ascending order of {@code comparator}.
-     * Average time O(n log n), worst O(n²), extra space O(log n) stack.
-     * Empty and single-element lists are left unchanged.
-     * The list must be mutable (index set/get).
-     */
+    /** Sorts the given list in place using the provided comparator. */
     public static <T> void sort(List<T> list, Comparator<T> comparator) {
         sortAndCount(list, comparator);
     }
 
-    /**
-     * Sorts {@code list} and returns how many comparator calls the sort performed.
-     * Average time O(n log n), worst O(n²), extra space O(log n).
-     * Returns 0 for a null, empty, or single-element list.
-     */
+    /** Sorts the list and returns how many element comparisons were performed. */
     public static <T> long sortAndCount(List<T> list, Comparator<T> comparator) {
         if (list == null || list.size() < 2) {
-            return 0L;
+            return 0L; // Already sorted if 0 or 1 element
         }
         if (comparator == null) {
             throw new NullPointerException("comparator");
         }
-        long[] comparisons = new long[1];
-        sort(list, 0, list.size() - 1, comparator, comparisons);
-        return comparisons[0];
+        Counter counter = new Counter();
+        quickSort(list, 0, list.size() - 1, comparator, counter);
+        return counter.count;
     }
 
-    private static <T> void sort(List<T> list, int lo, int hi, Comparator<T> comparator, long[] comparisons) {
-        if (lo >= hi) {
+    /** Recursively partitions the range [low, high] and sorts both halves. */
+    private static <T> void quickSort(List<T> list, int low, int high, Comparator<T> cmp, Counter counter) {
+        if (low >= high) {
             return;
         }
-        int pivot = partition(list, lo, hi, comparator, comparisons);
-        sort(list, lo, pivot - 1, comparator, comparisons);
-        sort(list, pivot + 1, hi, comparator, comparisons);
+        int pivotIndex = partition(list, low, high, cmp, counter);
+        quickSort(list, low, pivotIndex - 1, cmp, counter);
+        quickSort(list, pivotIndex + 1, high, cmp, counter);
     }
 
     /**
-     * Places the median of lo/mid/hi at the end, then runs Lomuto partition.
-     * Time O(hi - lo), space O(1).
+     * Lomuto partition: moves pivot to the end, puts all elements <= pivot on the left,
+     * and places the pivot in its final sorted position.
      */
-    private static <T> int partition(List<T> list, int lo, int hi, Comparator<T> comparator, long[] comparisons) {
-        medianOfThree(list, lo, hi, comparator, comparisons);
-        T pivot = list.get(hi);
-        int store = lo;
-        for (int j = lo; j < hi; j++) {
-            comparisons[0]++;
-            if (comparator.compare(list.get(j), pivot) <= 0) {
-                swap(list, store, j);
-                store++;
+    private static <T> int partition(List<T> list, int low, int high, Comparator<T> cmp, Counter counter) {
+        moveMedianToEnd(list, low, high, cmp, counter);
+        T pivot = list.get(high);
+        int storeIndex = low;
+
+        for (int j = low; j < high; j++) {
+            counter.count++;
+            if (cmp.compare(list.get(j), pivot) <= 0) {
+                swap(list, storeIndex, j);
+                storeIndex++;
             }
         }
-        swap(list, store, hi);
-        return store;
+        swap(list, storeIndex, high); // Put pivot into its final place
+        return storeIndex;
     }
 
-    private static <T> void medianOfThree(List<T> list, int lo, int hi, Comparator<T> comparator, long[] comparisons) {
-        int mid = lo + (hi - lo) / 2;
-        if (compare(list, lo, mid, comparator, comparisons) > 0) {
-            swap(list, lo, mid);
+    /** Picks the median of first, middle, and last elements to avoid O(n^2) on sorted lists. */
+    private static <T> void moveMedianToEnd(List<T> list, int low, int high, Comparator<T> cmp, Counter counter) {
+        int mid = low + (high - low) / 2;
+        if (compare(list, low, mid, cmp, counter) > 0) {
+            swap(list, low, mid);
         }
-        if (compare(list, mid, hi, comparator, comparisons) > 0) {
-            swap(list, mid, hi);
+        if (compare(list, mid, high, cmp, counter) > 0) {
+            swap(list, mid, high);
         }
-        if (compare(list, lo, mid, comparator, comparisons) > 0) {
-            swap(list, lo, mid);
+        if (compare(list, low, mid, cmp, counter) > 0) {
+            swap(list, low, mid);
         }
-        swap(list, mid, hi);
+        swap(list, mid, high); // Place chosen median at high
     }
 
-    private static <T> int compare(List<T> list, int i, int j, Comparator<T> comparator, long[] comparisons) {
-        comparisons[0]++;
-        return comparator.compare(list.get(i), list.get(j));
+    private static <T> int compare(List<T> list, int i, int j, Comparator<T> cmp, Counter counter) {
+        counter.count++;
+        return cmp.compare(list.get(i), list.get(j));
     }
 
     private static <T> void swap(List<T> list, int i, int j) {
         if (i == j) {
             return;
         }
-        T tmp = list.get(i);
+        T temp = list.get(i);
         list.set(i, list.get(j));
-        list.set(j, tmp);
+        list.set(j, temp);
     }
 }

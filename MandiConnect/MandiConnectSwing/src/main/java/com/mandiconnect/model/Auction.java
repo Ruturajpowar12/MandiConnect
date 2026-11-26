@@ -3,16 +3,16 @@ package com.mandiconnect.model;
 import java.time.LocalDateTime;
 
 /**
- * One auction per lot. {@code status} is {@code ACTIVE} or {@code CLOSED}.
- * {@code winnerBidId} is null until the auction closes with a winning bid.
+ * Model class representing an auction for a crop lot.
+ * Status can be ACTIVE or CLOSED.
  */
 public class Auction {
-    private long id;
-    private long lotId;
-    private LocalDateTime startTime;
-    private LocalDateTime endTime;
-    private String status;
-    private Long winnerBidId;
+    private long id;                 // Primary key in auctions table
+    private long lotId;              // ID of the crop lot being auctioned
+    private LocalDateTime startTime; // When auction started
+    private LocalDateTime endTime;   // Scheduled auction end time
+    private String status;           // ACTIVE or CLOSED
+    private Long winnerBidId;        // Winning bid ID (null until closed with a bid)
 
     public long getId() {
         return id;

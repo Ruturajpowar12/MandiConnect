@@ -8,8 +8,8 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 
 /**
- * Opens and closes an auction for a lot. The winner is the max-heap root
- * from {@link BidService#highestBid(long)}, not a SQL {@code MAX(amount)}.
+ * Handles starting, closing, and accepting/rejecting bids for lot auctions.
+ * Uses BidService.highestBid() (MaxHeap root) to pick the auction winner.
  */
 public class AuctionService {
 
@@ -22,6 +22,7 @@ public class AuctionService {
         this.bids = bids;
     }
 
+    /** Starts an auction for the lot and sets lot status to IN_AUCTION. */
     public Auction start(long lotId, int minutes) throws SQLException {
         if (minutes <= 0) {
             throw new IllegalArgumentException("Duration must be at least 1 minute.");
@@ -39,6 +40,7 @@ public class AuctionService {
         return auction;
     }
 
+    /** Closes an auction and picks the highest bid from MaxHeap as the winner. */
     public void close(long lotId) throws SQLException {
         Auction auction = dao.findByLot(lotId);
         if (auction == null) {
@@ -47,6 +49,7 @@ public class AuctionService {
         if ("CLOSED".equals(auction.getStatus())) {
             throw new IllegalStateException("This auction is already closed.");
         }
+        // Get highest offer in O(1) from MaxHeap instead of scanning DB
         Bid winner = bids.highestBid(lotId);
         Long winnerId = null;
         if (winner != null) {
@@ -54,16 +57,13 @@ public class AuctionService {
             lots.updateStatus(lotId, "SOLD");
             winnerId = winner.getId();
         } else {
+            // No bids placed -> lot goes back to AVAILABLE
             lots.updateStatus(lotId, "AVAILABLE");
         }
         dao.close(lotId, winnerId);
     }
 
-    /**
-     * Lets the farmer explicitly accept a chosen bid.
-     * Marks the chosen bid as ACCEPTED, marks other pending bids on this lot as REJECTED,
-     * updates the lot status to SOLD, and closes the auction.
-     */
+    /** Lets the farmer accept one bid, reject other pending bids, and mark lot SOLD. */
     public void acceptBid(long lotId, long selectedBidId) throws SQLException {
         bids.updateStatus(selectedBidId, "ACCEPTED");
         for (Bid b : bids.history(lotId)) {
@@ -78,9 +78,7 @@ public class AuctionService {
         }
     }
 
-    /**
-     * Lets the farmer explicitly reject a specific bid.
-     */
+    /** Lets the farmer reject a specific bid. */
     public void rejectBid(long bidId) throws SQLException {
         bids.updateStatus(bidId, "REJECTED");
     }
@@ -89,6 +87,7 @@ public class AuctionService {
         return dao.findByLot(lotId);
     }
 
+    /** Returns count of currently active auctions (shown in Admin dashboard). */
     public int activeCount() throws SQLException {
         return dao.findByStatus("ACTIVE").size();
     }

@@ -12,10 +12,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Plain JDBC access to the {@code users} table.
+ * Data Access Object (DAO) for reading and writing the 'users' table in MySQL.
  */
 public class UserDAO {
 
+    /** Checks if an account already exists with this email. */
     public boolean existsByEmail(String email) throws SQLException {
         String sql = "SELECT 1 FROM users WHERE email = ? LIMIT 1";
         try (Connection con = DBConnection.getConnection();
@@ -27,6 +28,7 @@ public class UserDAO {
         }
     }
 
+    /** Inserts a new user row and stores the generated ID on the User object. */
     public long insert(User user) throws SQLException {
         String sql = "INSERT INTO users (name, email, password, phone, location, role, active) VALUES (?, ?, ?, ?, ?, ?, ?)";
         try (Connection con = DBConnection.getConnection();
@@ -50,6 +52,7 @@ public class UserDAO {
         throw new SQLException("User insert did not return a key");
     }
 
+    /** Finds a user by email (used during login). */
     public User findByEmail(String email) throws SQLException {
         String sql = "SELECT * FROM users WHERE email = ?";
         try (Connection con = DBConnection.getConnection();
@@ -64,6 +67,7 @@ public class UserDAO {
         return null;
     }
 
+    /** Returns all registered users (shown in the Admin dashboard). */
     public List<User> findAll() throws SQLException {
         String sql = "SELECT * FROM users ORDER BY id";
         try (Connection con = DBConnection.getConnection();
@@ -77,6 +81,7 @@ public class UserDAO {
         }
     }
 
+    /** Flips a user's active status between enabled (1) and disabled (0). */
     public void toggleActive(long id) throws SQLException {
         String sql = "UPDATE users SET active = IF(active = 1, 0, 1) WHERE id = ?";
         try (Connection con = DBConnection.getConnection();
@@ -86,6 +91,7 @@ public class UserDAO {
         }
     }
 
+    /** Converts a database ResultSet row into a User object. */
     private User map(ResultSet rs) throws SQLException {
         User user = new User();
         user.setId(rs.getLong("id"));

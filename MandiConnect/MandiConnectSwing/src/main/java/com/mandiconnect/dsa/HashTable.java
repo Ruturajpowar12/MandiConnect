@@ -3,36 +3,16 @@ package com.mandiconnect.dsa;
 import java.util.Optional;
 
 /**
- * Open-addressed hash table with <strong>linear probing</strong> and tombstones.
- *
- * <p>MandiConnect stores every crop lot under its {@code LOT-} code. Traders and the
- * Algorithm Console resolve a code with {@link #get(String)} instead of scanning the
- * lot table. The polynomial hash {@code h = (h * 31 + c) mod capacity} spreads short
- * alphanumeric codes across the buckets.</p>
- *
- * <p>When the live load factor reaches 0.7 the table rehashes into
- * {@code nextPrime(capacity * 2)} so the average probe length stays constant.
- * Deleted slots become tombstones: search walks past them, and the next insert
- * reuses the first tombstone it saw. The core storage is a raw array. This class
- * does not use {@code java.util.HashMap}.</p>
- *
- * <pre>
- * Operation   Average    Worst     Extra space
- * put         O(1)       O(n)      O(1)  (resize is O(n) time and space)
- * get         O(1)       O(n)      O(1)
- * remove      O(1)       O(n)      O(1)
- * resize      O(n)       O(n)      O(n)
- * Structure                         O(n) slots
- * </pre>
- *
- * @param <V> payload type, typically {@code Lot}
+ * Custom Hash Table using open addressing (linear probing) and tombstones.
+ * Used to look up crop lots by their LOT-code in O(1) average time.
  */
 public class HashTable<V> {
 
+    /** Stores one key-value pair inside the table array. */
     private static final class Entry<V> {
         final String key;
         V value;
-        boolean tombstone;
+        boolean deleted; // Tombstone flag so search does not stop at deleted slots
 
         Entry(String key, V value) {
             this.key = key;
@@ -40,17 +20,12 @@ public class HashTable<V> {
         }
     }
 
-    private Entry<V>[] table;
-    private int capacity;
-    private int size;
-    private long totalProbes;
+    private Entry<V>[] table; // Underlying array of buckets
+    private int capacity;     // Total slots in the array
+    private int size;         // Number of active (non-deleted) entries
+    private long totalProbes; // Counts how many slots were checked (shown in console)
 
-    /**
-     * Allocates a table of the requested capacity.
-     * Time O(capacity), space O(capacity).
-     *
-     * @param initialCapacity number of slots, at least 2
-     */
+    /** Creates an empty hash table with the given starting size. */
     @SuppressWarnings("unchecked")
     public HashTable(int initialCapacity) {
         if (initialCapacity < 2) {
@@ -60,136 +35,113 @@ public class HashTable<V> {
         this.table = new Entry[capacity];
     }
 
-    /**
-     * Inserts or replaces the value stored under {@code key}.
-     * Average O(1), worst O(n) when every slot is probed. Resize is O(n).
-     *
-     * @param key   non-null lot code or other string key
-     * @param value payload; may be null
-     */
+    /** Inserts or updates a key-value pair. Resizes when load factor >= 0.7. */
     public void put(String key, V value) {
         if (key == null) {
             throw new NullPointerException("key");
         }
+        // Grow table when 70% full to keep probing fast
         if ((size + 1.0) / capacity >= 0.7) {
             resize();
         }
-        int idx = hash(key);
-        int firstTombstone = -1;
-        for (int n = 0; n < capacity; n++) {
+
+        int index = hash(key);
+        int firstDeleted = -1; // Remember first tombstone slot in case we need to insert
+
+        // Linear probing: check index, then index+1, index+2, wrapping around
+        for (int step = 0; step < capacity; step++) {
             totalProbes++;
-            Entry<V> entry = table[idx];
+            Entry<V> entry = table[index];
+
             if (entry == null) {
-                int slot = firstTombstone >= 0 ? firstTombstone : idx;
-                table[slot] = new Entry<>(key, value);
+                // Empty slot found: reuse earlier tombstone if we saw one, else use this slot
+                int target = (firstDeleted != -1) ? firstDeleted : index;
+                table[target] = new Entry<>(key, value);
                 size++;
                 return;
             }
-            if (entry.tombstone) {
-                if (firstTombstone < 0) {
-                    firstTombstone = idx;
+            if (entry.deleted) {
+                // Save first tombstone position, keep searching in case key already exists later
+                if (firstDeleted == -1) {
+                    firstDeleted = index;
                 }
             } else if (entry.key.equals(key)) {
+                // Key already exists: update its value
                 entry.value = value;
                 return;
             }
-            idx = (idx + 1) % capacity;
+            index = (index + 1) % capacity;
         }
-        if (firstTombstone >= 0) {
-            table[firstTombstone] = new Entry<>(key, value);
+
+        // Fallback if table had tombstones in every slot
+        if (firstDeleted != -1) {
+            table[firstDeleted] = new Entry<>(key, value);
             size++;
-            return;
         }
-        resize();
-        put(key, value);
     }
 
-    /**
-     * Looks the key up with linear probing.
-     * Average O(1), worst O(n). Returns an empty Optional when the key is absent.
-     * Each examined slot increments {@link #getTotalProbes()}.
-     */
+    /** Searches for a key using linear probing and returns its value if found. */
     public Optional<V> get(String key) {
         if (key == null) {
             return Optional.empty();
         }
-        int idx = hash(key);
-        for (int n = 0; n < capacity; n++) {
+        int index = hash(key);
+        for (int step = 0; step < capacity; step++) {
             totalProbes++;
-            Entry<V> entry = table[idx];
+            Entry<V> entry = table[index];
             if (entry == null) {
+                // Null means key was never inserted here -> stop search
                 return Optional.empty();
             }
-            if (!entry.tombstone && entry.key.equals(key)) {
+            if (!entry.deleted && entry.key.equals(key)) {
                 return Optional.ofNullable(entry.value);
             }
-            idx = (idx + 1) % capacity;
+            index = (index + 1) % capacity;
         }
         return Optional.empty();
     }
 
-    /**
-     * Marks the key's slot as a tombstone so later probes still terminate correctly.
-     * Average O(1), worst O(n).
-     *
-     * @return {@code true} when a live entry was removed
-     */
+    /** Marks the key's slot as deleted (tombstone) so probing chains stay intact. */
     public boolean remove(String key) {
         if (key == null) {
             return false;
         }
-        int idx = hash(key);
-        for (int n = 0; n < capacity; n++) {
+        int index = hash(key);
+        for (int step = 0; step < capacity; step++) {
             totalProbes++;
-            Entry<V> entry = table[idx];
+            Entry<V> entry = table[index];
             if (entry == null) {
                 return false;
             }
-            if (!entry.tombstone && entry.key.equals(key)) {
-                entry.tombstone = true;
+            if (!entry.deleted && entry.key.equals(key)) {
+                entry.deleted = true; // Leave tombstone instead of setting null
                 entry.value = null;
                 size--;
                 return true;
             }
-            idx = (idx + 1) % capacity;
+            index = (index + 1) % capacity;
         }
         return false;
     }
 
-    /**
-     * Live entries, excluding tombstones. Time O(1), space O(1).
-     */
     public int size() {
         return size;
     }
 
-    /**
-     * Current slot count. Time O(1), space O(1).
-     */
     public int capacity() {
         return capacity;
     }
 
-    /**
-     * Live size divided by capacity. Time O(1), space O(1).
-     * A value of 0.7 or more triggers {@link #resize()} on the next insert.
-     */
+    /** Ratio of stored items to total slots. */
     public double loadFactor() {
         return (double) size / capacity;
     }
 
-    /**
-     * Cumulative slots examined by {@code put}, {@code get}, and {@code remove}
-     * since construction, including rehash probes. Time O(1), space O(1).
-     */
     public long getTotalProbes() {
         return totalProbes;
     }
 
-    /**
-     * Polynomial rolling hash reduced into the current capacity.
-     * Time O(key length), space O(1).
-     */
+    /** Converts a string key into an array index: h = (h * 31 + char) mod capacity. */
     private int hash(String key) {
         long h = 0;
         for (int i = 0; i < key.length(); i++) {
@@ -201,54 +153,38 @@ public class HashTable<V> {
         return (int) h;
     }
 
-    /**
-     * Time O(n) to re-insert every live entry. Space O(new capacity).
-     */
+    /** Doubles capacity to the next prime number and re-inserts all active entries. */
     @SuppressWarnings("unchecked")
     private void resize() {
-        Entry<V>[] old = table;
-        int grown = nextPrime(capacity * 2);
-        if (grown <= capacity) {
-            grown = nextPrime(capacity + 2);
-        }
-        capacity = grown;
+        Entry<V>[] oldTable = table;
+        capacity = nextPrime(capacity * 2);
         table = new Entry[capacity];
         size = 0;
-        for (Entry<V> entry : old) {
-            if (entry != null && !entry.tombstone) {
-                putDuringResize(entry.key, entry.value);
+
+        // Re-hash every active item into the bigger table (tombstones are dropped)
+        for (Entry<V> entry : oldTable) {
+            if (entry != null && !entry.deleted) {
+                int index = hash(entry.key);
+                while (table[index] != null) {
+                    totalProbes++;
+                    index = (index + 1) % capacity;
+                }
+                totalProbes++;
+                table[index] = new Entry<>(entry.key, entry.value);
+                size++;
             }
         }
     }
 
-    private void putDuringResize(String key, V value) {
-        int idx = hash(key);
-        while (table[idx] != null) {
-            totalProbes++;
-            idx = (idx + 1) % capacity;
-        }
-        totalProbes++;
-        table[idx] = new Entry<>(key, value);
-        size++;
-    }
-
-    /**
-     * Smallest prime greater than or equal to {@code n}. Time O(n sqrt n) worst, space O(1).
-     */
+    /** Finds the smallest prime >= n (prime sizes reduce hash collisions). */
     private static int nextPrime(int n) {
-        if (n <= 2) {
-            return 2;
-        }
-        int candidate = (n % 2 == 0) ? n + 1 : n;
+        int candidate = (n <= 2) ? 2 : (n % 2 == 0 ? n + 1 : n);
         while (!isPrime(candidate)) {
             candidate += 2;
         }
         return candidate;
     }
 
-    /**
-     * Trial division. Time O(sqrt n), space O(1).
-     */
     private static boolean isPrime(int n) {
         if (n < 2) {
             return false;

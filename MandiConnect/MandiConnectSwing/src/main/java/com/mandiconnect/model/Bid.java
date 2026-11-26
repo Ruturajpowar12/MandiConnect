@@ -1,14 +1,15 @@
 package com.mandiconnect.model;
 
 /**
- * A trader's offer on a lot. {@code status} is {@code PENDING} or {@code WINNING}.
+ * Model class representing a bid placed by a trader on a lot.
+ * Status can be PENDING, WINNING, ACCEPTED, or REJECTED.
  */
 public class Bid {
-    private long id;
-    private long lotId;
-    private long traderId;
-    private double amount;
-    private String status;
+    private long id;        // Primary key in bids table
+    private long lotId;     // Lot on which bid was placed
+    private long traderId;  // Trader user ID who placed the bid
+    private double amount;  // Bid price in rupees
+    private String status;  // Current bid status
 
     public long getId() {
         return id;

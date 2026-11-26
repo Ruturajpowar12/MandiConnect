@@ -13,10 +13,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Plain JDBC access to the {@code auctions} table.
+ * Data Access Object (DAO) for reading and writing the 'auctions' table in MySQL.
  */
 public class AuctionDAO {
 
+    /** Inserts a new auction row and sets the generated ID on the object. */
     public long insert(Auction auction) throws SQLException {
         String sql = "INSERT INTO auctions (lot_id, start_time, end_time, status, winner_bid_id) VALUES (?, ?, ?, ?, ?)";
         try (Connection con = DBConnection.getConnection();
@@ -42,6 +43,7 @@ public class AuctionDAO {
         throw new SQLException("Auction insert did not return a key");
     }
 
+    /** Finds the auction associated with a given lot ID, or null if none exists. */
     public Auction findByLot(long lotId) throws SQLException {
         String sql = "SELECT * FROM auctions WHERE lot_id = ?";
         try (Connection con = DBConnection.getConnection();
@@ -56,6 +58,7 @@ public class AuctionDAO {
         return null;
     }
 
+    /** Returns all auctions matching the given status (e.g., ACTIVE). */
     public List<Auction> findByStatus(String status) throws SQLException {
         String sql = "SELECT * FROM auctions WHERE status = ? ORDER BY id";
         try (Connection con = DBConnection.getConnection();
@@ -71,6 +74,7 @@ public class AuctionDAO {
         }
     }
 
+    /** Marks the auction as CLOSED and records the winning bid ID (if any). */
     public void close(long lotId, Long winnerBidId) throws SQLException {
         String sql = "UPDATE auctions SET status = 'CLOSED', winner_bid_id = ? WHERE lot_id = ?";
         try (Connection con = DBConnection.getConnection();
@@ -85,6 +89,7 @@ public class AuctionDAO {
         }
     }
 
+    /** Converts a database ResultSet row into an Auction object. */
     private Auction map(ResultSet rs) throws SQLException {
         Auction auction = new Auction();
         auction.setId(rs.getLong("id"));

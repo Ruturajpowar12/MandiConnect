@@ -12,16 +12,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Plain JDBC access to the {@code lots} table.
+ * Data Access Object (DAO) for reading and writing the 'lots' table in MySQL.
  */
 public class LotDAO {
 
+    /** Inserts a new crop lot into MySQL and saves the generated ID. */
     public long insert(Lot lot) throws SQLException {
-        String sql = """
-                INSERT INTO lots (lot_code, crop_name, quantity, unit, quality_grade, location,
-                                  expected_price, description, farmer_id, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """;
+        String sql = "INSERT INTO lots (lot_code, crop_name, quantity, unit, quality_grade, location, "
+                + "expected_price, description, farmer_id, status) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection con = DBConnection.getConnection();
              PreparedStatement ps = con.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, lot.getLotCode());
@@ -46,10 +45,12 @@ public class LotDAO {
         throw new SQLException("Lot insert did not return a key");
     }
 
+    /** Returns every lot in the database. */
     public List<Lot> findAll() throws SQLException {
         return query("SELECT * FROM lots ORDER BY id");
     }
 
+    /** Returns all lots created by a specific farmer. */
     public List<Lot> findByFarmer(long farmerId) throws SQLException {
         String sql = "SELECT * FROM lots WHERE farmer_id = ? ORDER BY id";
         try (Connection con = DBConnection.getConnection();
@@ -59,6 +60,7 @@ public class LotDAO {
         }
     }
 
+    /** Returns lots matching a specific status. */
     public List<Lot> findByStatus(String status) throws SQLException {
         String sql = "SELECT * FROM lots WHERE status = ? ORDER BY id";
         try (Connection con = DBConnection.getConnection();
@@ -68,10 +70,12 @@ public class LotDAO {
         }
     }
 
+    /** Returns lots that traders can bid on (AVAILABLE or IN_AUCTION). */
     public List<Lot> findAvailableForTrade() throws SQLException {
         return query("SELECT * FROM lots WHERE status IN ('AVAILABLE', 'IN_AUCTION') ORDER BY id");
     }
 
+    /** Finds a single lot by its primary key ID. */
     public Lot findById(long id) throws SQLException {
         String sql = "SELECT * FROM lots WHERE id = ?";
         try (Connection con = DBConnection.getConnection();
@@ -86,6 +90,7 @@ public class LotDAO {
         return null;
     }
 
+    /** Updates a lot's status (AVAILABLE, IN_AUCTION, or SOLD). */
     public void updateStatus(long id, String status) throws SQLException {
         String sql = "UPDATE lots SET status = ? WHERE id = ?";
         try (Connection con = DBConnection.getConnection();
@@ -96,6 +101,7 @@ public class LotDAO {
         }
     }
 
+    /** Deletes a lot by ID (also removes its bids/auction via ON DELETE CASCADE). */
     public void delete(long id) throws SQLException {
         String sql = "DELETE FROM lots WHERE id = ?";
         try (Connection con = DBConnection.getConnection();
@@ -122,6 +128,7 @@ public class LotDAO {
         }
     }
 
+    /** Converts a database ResultSet row into a Lot object. */
     private Lot map(ResultSet rs) throws SQLException {
         Lot lot = new Lot();
         lot.setId(rs.getLong("id"));
